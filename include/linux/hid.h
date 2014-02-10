@@ -995,8 +995,11 @@ static inline int hid_hw_raw_request(struct hid_device *hdev,
 	if (len < 1 || len > HID_MAX_BUFFER_SIZE || !buf)
 		return -EINVAL;
 
-	return hdev->ll_driver->raw_request(hdev, reportnum, buf, len,
+	if (hdev->ll_driver->raw_request)
+		return hdev->ll_driver->raw_request(hdev, reportnum, buf, len,
 						    rtype, reqtype);
+
+	return -ENOSYS;
 }
 
 /**

@@ -953,15 +953,13 @@ static int usbhid_output_report(struct hid_device *hid, __u8 *buf, size_t count)
 	return ret;
 }
 
-static int usbhid_output_raw_report(struct hid_device *hid, __u8 *buf,
-		size_t count, unsigned char report_type)
+
+static void usbhid_restart_queues(struct usbhid_device *usbhid)
 {
-	struct usbhid_device *usbhid = hid->driver_data;
-
-	if (usbhid->urbout && report_type != HID_FEATURE_REPORT)
-		return usbhid_output_report(hid, buf, count);
-
-	return usbhid_set_raw_report(hid, buf[0], buf, count, report_type);
+	if (usbhid->urbout && !test_bit(HID_OUT_RUNNING, &usbhid->iofl))
+		usbhid_restart_out_queue(usbhid);
+	if (!test_bit(HID_CTRL_RUNNING, &usbhid->iofl))
+		usbhid_restart_ctrl_queue(usbhid);
 }
 
 static void hid_free_buffers(struct usb_device *dev, struct hid_device *hid)
@@ -1299,7 +1297,6 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 
 	usb_set_intfdata(intf, hid);
 	hid->ll_driver = &usb_hid_driver;
-	hid->hid_output_raw_report = usbhid_output_raw_report;
 	hid->ff_init = hid_pidff_init;
 #ifdef CONFIG_USB_HIDDEV
 	hid->hiddev_connect = hiddev_connect;

@@ -124,7 +124,17 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		if (!p)
 			continue;
 
-		if (test_tsk_thread_flag(p, TIF_MEMDIE) &&
+		/*
+		 * TIF_MEMDIE is only set on the thread that was picked. Once that
+		 * thread exits, find_lock_task_mm() returns another thread of the
+		 * same dying process, so also check whether the whole thread group
+		 * is exiting. A pending SIGKILL isn't enough: each thread dequeues
+		 * it as it starts to exit, while it still holds the mm. Otherwise
+		 * the process is selected again and the next one is killed before
+		 * any memory has been freed.
+		 */
+		if ((test_tsk_thread_flag(p, TIF_MEMDIE) ||
+		     signal_group_exit(p->signal)) &&
 		    time_before_eq(jiffies, lowmem_deathpending_timeout)) {
 			task_unlock(p);
 			rcu_read_unlock();

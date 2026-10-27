@@ -358,6 +358,23 @@ static int vegas_spk_post_enable(struct snd_soc_dapm_widget *w,
 	/* restore mute state */
 	snd_soc_update_bits(codec, mute_reg, mute_mask, priv->spk_mute_cache);
 
+	/*
+	 * Unmuting ramps the volume up from mute at the output ramp rate.
+	 * Wait for the ramp to finish, otherwise the start of the stream is
+	 * played while the volume is still ramping up and short sounds come
+	 * out at a random level.
+	 */
+	if (!(priv->spk_mute_cache & mute_mask)) {
+		static const unsigned int ramp_us[] = {
+			0, 500, 1000, 2000, 4000, 8000, 15000, 30000,
+		};
+
+		val = snd_soc_read(codec, ARIZONA_OUTPUT_VOLUME_RAMP);
+		val = (val & ARIZONA_OUT_VI_RAMP_MASK) >> ARIZONA_OUT_VI_RAMP_SHIFT;
+		/* up to 96dB from mute, in 6dB steps */
+		msleep(DIV_ROUND_UP(16 * ramp_us[val], 1000));
+	}
+
 	return 0;
 }
 

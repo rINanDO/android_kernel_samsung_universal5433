@@ -62,6 +62,12 @@ static int lowmem_minfree_size = 4;
 
 static unsigned long lowmem_deathpending_timeout;
 
+/*
+ * Below this percentage of free swap, the file cache no longer holds off
+ * the killer (0 disables it). See lowmem_shrink().
+ */
+static uint32_t lowmem_swap_free_low_percent = 10;
+
 #define lowmem_print(level, x...)			\
 	do {						\
 		if (lowmem_debug_level >= (level))	\
@@ -85,6 +91,18 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 						global_page_state(NR_SHMEM) -
 						global_page_state(NR_UNEVICTABLE) -
 						total_swapcache_pages();
+
+	/*
+	 * With swap (zram) nearly full, anonymous memory can't be reclaimed
+	 * any more and what is left of the file cache is mostly the code of
+	 * running apps. It gets evicted and read back over and over while
+	 * other_file stays above minfree, so nothing is killed and the
+	 * system thrashes. Let free memory alone decide in that case.
+	 */
+	if (lowmem_swap_free_low_percent && total_swap_pages > 0 &&
+	    get_nr_swap_pages() * 100 <
+	    total_swap_pages * lowmem_swap_free_low_percent)
+		other_file = 0;
 
 	if (lowmem_adj_size < array_size)
 		array_size = lowmem_adj_size;
@@ -297,6 +315,8 @@ module_param_array_named(adj, lowmem_adj, short, &lowmem_adj_size,
 module_param_array_named(minfree, lowmem_minfree, uint, &lowmem_minfree_size,
 			 S_IRUGO | S_IWUSR);
 module_param_named(debug_level, lowmem_debug_level, uint, S_IRUGO | S_IWUSR);
+module_param_named(swap_free_low_percent, lowmem_swap_free_low_percent, uint,
+		   S_IRUGO | S_IWUSR);
 
 module_init(lowmem_init);
 module_exit(lowmem_exit);
